@@ -1,4 +1,3 @@
-
 name: Build Antepasados APK
 
 on:
@@ -14,16 +13,12 @@ jobs:
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Extraer proyecto Android
+      - name: Extraer proyecto Android v5
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="$(find . -maxdepth 1 -type f -iname 'Antepasados_Proyecto_Android_v4_Impresion.zip' -print -quit)"
-          if [ -z "$ZIP" ]; then
-            echo "No se encontró el ZIP de la versión 4"
-            ls -la
-            exit 1
-          fi
+          ZIP="$(find . -maxdepth 1 -type f -iname 'Antepasados_Proyecto_Android_v5_Amor_Esperanza.zip' -print -quit)"
+          if [ -z "$ZIP" ]; then echo "No se encontró el ZIP de la versión 5 en la raíz del repositorio"; ls -la; exit 1; fi
           mkdir -p source
           unzip -q "$ZIP" -d source
           ROOT="$(find source -type f -name settings.gradle -print -quit | xargs -r dirname)"
@@ -45,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          test -d "$SDK_ROOT"
+          if [ ! -d "$SDK_ROOT/cmdline-tools" ]; then echo "No se encontró cmdline-tools en $SDK_ROOT"; exit 1; fi
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit)"
@@ -55,7 +50,9 @@ jobs:
           echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
 
       - name: Instalar componentes Android
+        shell: bash
         run: |
+          set -euo pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
@@ -67,7 +64,7 @@ jobs:
       - name: Compilar APK
         run: gradle assembleDebug
 
-      - name: Guardar APK
+      - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
           name: Antepasados-debug-apk
