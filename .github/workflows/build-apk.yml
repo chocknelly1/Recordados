@@ -1,9 +1,8 @@
+
 name: Build Antepasados APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 permissions:
   contents: read
@@ -12,75 +11,65 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Locate and extract Android project ZIP if needed
+      - name: Extraer proyecto Android
         shell: bash
         run: |
-          set -euxo pipefail
-          if [[ -f settings.gradle && -d app ]]; then
-            echo "Android project files are already at repository root."
-          else
-            ZIP="$(find . -type f -iname '*.zip' -not -path './.git/*' -print -quit || true)"
-            if [[ -z "$ZIP" ]]; then
-              echo "ERROR: No Android project at repository root and no ZIP archive found."
-              find . -maxdepth 3 -type f -print
-              exit 1
-            fi
-            echo "Extracting archive: $ZIP"
-            mkdir -p _unpacked
-            unzip -q "$ZIP" -d _unpacked
-            ROOT="$(find _unpacked -type f -name settings.gradle -print -quit | xargs -r dirname)"
-            if [[ -z "$ROOT" || ! -f "$ROOT/app/build.gradle" ]]; then
-              echo "ERROR: ZIP does not contain settings.gradle and app/build.gradle."
-              find _unpacked -maxdepth 5 -type f -print
-              exit 1
-            fi
-            cp "$ROOT/settings.gradle" .
-            cp "$ROOT/build.gradle" .
-            cp "$ROOT/gradle.properties" .
-            cp -R "$ROOT/app" .
+          set -euo pipefail
+          ZIP="$(find . -maxdepth 1 -type f -iname 'Antepasados_Proyecto_Android_v4_Impresion.zip' -print -quit)"
+          if [ -z "$ZIP" ]; then
+            echo "No se encontró el ZIP de la versión 4"
+            ls -la
+            exit 1
           fi
+          mkdir -p source
+          unzip -q "$ZIP" -d source
+          ROOT="$(find source -type f -name settings.gradle -print -quit | xargs -r dirname)"
+          test -n "$ROOT"
+          test -f "$ROOT/app/build.gradle"
+          cp "$ROOT/settings.gradle" .
+          cp "$ROOT/build.gradle" .
+          cp "$ROOT/gradle.properties" .
+          cp -R "$ROOT/app" .
 
-      - name: Set up Java 17
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
+      - name: Configurar Android SDK
         shell: bash
         run: |
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          if [ ! -d "$SDK_ROOT/cmdline-tools" ]; then
-            echo "ERROR: No se encontró el Android SDK en $SDK_ROOT"
-            exit 1
-          fi
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -d "$SDK_ROOT"
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
-          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: No se encontró sdkmanager"
-            exit 1
-          fi
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -n "$SDKMANAGER"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Instalar componentes Android
+        run: |
           yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Set up Gradle
+      - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
+      - name: Compilar APK
         run: gradle assembleDebug
 
-      - name: Upload APK artifact
+      - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
           name: Antepasados-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
